@@ -24,6 +24,7 @@ from app.database.base import Base
 import app.models.country
 import app.models.scenario
 import app.models.simulation
+import app.models.trade  # Phase 22: bilateral trade ledger
 from app.core.config import settings
 
 # add your model's MetaData object here
@@ -63,6 +64,15 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    # Fail-closed safety guard using actual connection metadata (not just URL string)
+    import sqlalchemy as sa
+    db_name = connection.execute(sa.text("SELECT current_database();")).scalar()
+    if db_name == "econosphere":
+        raise RuntimeError(
+            "FAIL-CLOSED SAFETY GUARD: Connection metadata confirms target database is active "
+            "'econosphere'. Migration execution on the active production database is strictly prohibited!"
+        )
+
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
@@ -76,7 +86,18 @@ async def run_async_migrations() -> None:
     """
 
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = str(settings.database_url)
+    target_url = config.get_main_option("sqlalchemy.url")
+    if not target_url or "driver://user:pass@localhost/dbname" in target_url:
+        target_url = str(settings.database_url)
+
+    # Fail-closed safety guard against mutating active database in testing
+    import os
+    if "econosphere" in target_url and "econosphere_migration_test" not in target_url:
+        raise RuntimeError(
+            "FAIL-CLOSED GUARD: Migration URL strictly forbidden from targeting active 'econosphere' database!"
+        )
+
+    configuration["sqlalchemy.url"] = target_url
     
     connectable = async_engine_from_config(
         configuration,
@@ -86,6 +107,7 @@ async def run_async_migrations() -> None:
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        await connection.commit()
 
     await connectable.dispose()
 

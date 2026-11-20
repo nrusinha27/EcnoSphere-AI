@@ -25,25 +25,19 @@ class ScenarioCompiler:
         
         state: GlobalState = {}
         for country in countries:
-            # Find the latest indicator year for baseline
+            country_state = {
+                "gdp": 0.0,
+                "inflation": 0.0,
+                "unemployment": 0.0,
+                "interest_rate": 0.0,
+                "trade_balance": 0.0,
+            }
             if country.historical_indicators:
-                latest_indicator = sorted(country.historical_indicators, key=lambda x: x.year, reverse=True)[0]
-                state[country.iso3] = {
-                    "gdp": latest_indicator.gdp,
-                    "inflation": latest_indicator.inflation,
-                    "unemployment": latest_indicator.unemployment,
-                    "interest_rate": latest_indicator.interest_rate,
-                    "trade_balance": latest_indicator.trade_balance,
-                }
-            else:
-                # Default empty baseline if no data
-                state[country.iso3] = {
-                    "gdp": 0.0,
-                    "inflation": 0.0,
-                    "unemployment": 0.0,
-                    "interest_rate": 0.0,
-                    "trade_balance": 0.0,
-                }
+                for ind in sorted(country.historical_indicators, key=lambda x: x.year):
+                    key = ind.indicator_name.lower().replace(" ", "_")
+                    if key in country_state:
+                        country_state[key] = float(ind.value)
+            state[country.iso3] = country_state
         return state
 
     async def fetch_scenario_events(self, version_id: int):
@@ -55,4 +49,22 @@ class ScenarioCompiler:
         version = result.scalar_one_or_none()
         if not version:
             raise ValueError(f"Scenario version {version_id} not found")
+        return version.events
+
+    async def fetch_scenario_events_by_scenario(self, scenario_id: int):
+        """
+        Fetches the events attached to the latest version of a scenario.
+        Falls back to treating scenario_id == version_id when no explicit versioning exists.
+        """
+        # Try to find the latest version for this scenario
+        stmt = (
+            select(ScenarioVersion)
+            .options(selectinload(ScenarioVersion.events))
+            .where(ScenarioVersion.scenario_id == scenario_id)
+            .order_by(ScenarioVersion.id.desc())
+        )
+        result = await self.session.execute(stmt)
+        version = result.scalars().first()
+        if not version:
+            raise ValueError(f"No scenario version found for scenario_id={scenario_id}")
         return version.events

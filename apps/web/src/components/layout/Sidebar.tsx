@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { Globe, LineChart, Brain, Cpu, FileText, Network } from 'lucide-react'
+import { Globe, LineChart, Scale, Brain, Cpu, FileText, Network } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 
 export function Sidebar() {
@@ -9,6 +9,7 @@ export function Sidebar() {
   const navItems = [
     { name: 'Map Overview', href: '/dashboard', icon: Globe },
     { name: 'Countries', href: '/dashboard/countries', icon: LineChart },
+    { name: 'Compare', href: '/dashboard/compare', icon: Scale },
     { name: 'Trade Network', href: '/dashboard/trade', icon: Network },
     { name: 'Scenarios', href: '/dashboard/scenarios', icon: FileText },
     { name: 'Simulations', href: '/dashboard/simulation', icon: Cpu },

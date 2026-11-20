@@ -142,11 +142,16 @@ class InferenceRequest(BaseModel):
 
 class InferenceResponse(BaseModel):
     """
-    Structured production prediction response.
+    Structured production prediction response — Stage 2 extended.
+    Includes 90% prediction interval computed from global Q90=11.4507 calibration.
     """
     country: str
     year: int
     predicted_gdp_growth: float
+    lower_bound_90: float
+    upper_bound_90: float
+    interval_width: float
+    q90: float
     model_version: str
     production_status: str
 

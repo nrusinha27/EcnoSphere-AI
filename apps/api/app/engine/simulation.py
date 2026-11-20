@@ -64,7 +64,7 @@ class SimulationEngine:
 
             # 2. Compilation
             baseline_state = await self.compiler.fetch_baseline_state()
-            events = await self.compiler.fetch_scenario_events(version_id=run.scenario_id) # Using scenario_id as version for now
+            events = await self.compiler.fetch_scenario_events_by_scenario(scenario_id=run.scenario_id)
 
             # 3. Event Processing
             initial_shocks = self.event_processor.process(events)
@@ -100,17 +100,20 @@ class SimulationEngine:
                 self.session.add(snapshot)
                 await self.session.commit()
                 
-                # Here we could publish to Redis for WebSockets
-                import app.redis.client
-                payload = {
-                    "type": "SNAPSHOT",
-                    "run_id": self.run_id,
-                    "horizon": days,
-                    "message": f"Snapshot generated for day {days}",
-                    "global_state": final_state,
-                    "active_shocks": propagated_shocks
-                }
-                await app.redis.client.redis_client.publish(f"simulation_{self.run_id}", json.dumps(payload))
+                # Publish to Redis for WebSockets
+                try:
+                    from app.redis.client import sync_redis_client
+                    payload = {
+                        "type": "SNAPSHOT",
+                        "run_id": self.run_id,
+                        "horizon": days,
+                        "message": f"Snapshot generated for day {days}",
+                        "global_state": final_state,
+                        "active_shocks": propagated_shocks
+                    }
+                    sync_redis_client.publish(f"simulation_{self.run_id}", json.dumps(payload))
+                except Exception as pub_err:
+                    await self._log(f"Redis publish warning on day {days}: {str(pub_err)}", severity=LogSeverity.WARNING)
 
             run.status = SimulationStatus.COMPLETED
             run.completed_at = datetime.utcnow()
