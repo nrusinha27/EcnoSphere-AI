@@ -1,4 +1,622 @@
-"""
+PHASE 11 — PRE-TRAINING VERIFICATION & INTEGRATION AUDIT
+
+IMPORTANT:
+Do NOT train any ML model yet.
+Do NOT start the improved ML training step.
+Do NOT modify data/raw/master_panel.csv.
+
+We have completed several Phase 11 steps recently, including:
+
+- Dataset quality audit
+- Data preprocessing
+- Country identity cleaning
+- INX removal
+- Missing-value handling
+- Feature engineering
+- Lag and rolling features
+- Leakage checks
+- Chronological train/validation/test structure
+- Strict T+1 forecasting target
+- Next-year forecasting dataset
+
+Before approving ML training, I want you to perform a COMPLETE verification and integration audit of everything implemented so far.
+
+The goal is to answer:
+
+"Are the things we implemented actually working correctly together, or are there hidden problems that could produce incorrect ML predictions?"
+
+You are working inside the existing EconoSphere AI project.
+
+PROJECT ROOT:
+D:\Development\EconoSphere AI
+
+--------------------------------------------------
+1. FIRST: INSPECT THE EXISTING PROJECT
+--------------------------------------------------
+
+Before changing anything, inspect the existing structure and relevant files.
+
+At minimum inspect:
+
+- apps/api/ml/data_audit.py
+- apps/api/ml/data_preprocessing.py
+- apps/api/ml/forecasting_target.py
+- apps/api/ml/train_baseline.py
+- apps/api/tests/test_forecasting_target.py
+- data/raw/master_panel.csv
+- data/processed/master_panel_processed.csv
+- data/processed/master_panel_forecasting.csv
+- docs/phase11/dataset_quality_audit.md
+- docs/phase11/data_preprocessing_report.md
+- docs/phase11/next_year_forecasting_design_report.md
+
+Also inspect any existing tests, configuration files, requirements/pyproject files, and related ML utilities that are actually used by these scripts.
+
+DO NOT assume that previous completion reports are correct.
+Verify the actual code and generated datasets.
+
+--------------------------------------------------
+2. RAW DATA INTEGRITY CHECK
+--------------------------------------------------
+
+Verify that:
+
+data/raw/master_panel.csv
+
+has NOT been modified.
+
+Compare its current checksum against the previously recorded checksum:
+
+MD5:
+8ac7e0b2bf09fbe89289f82d0c7cf25e
+
+SHA-256:
+0bad18504ede43e2d2dbfdecab275c00ee84ab97f5ac4cee22857d6170515db0
+
+If the checksum differs, STOP and clearly report that.
+
+Do NOT modify the raw dataset.
+
+--------------------------------------------------
+3. VERIFY THE PREPROCESSING PIPELINE
+--------------------------------------------------
+
+Run the preprocessing pipeline:
+
+python apps/api/ml/data_preprocessing.py
+
+Verify:
+
+- Script completes successfully
+- Output file is created
+- Row count is expected
+- Column count is expected
+- country_code exists
+- country_name exists
+- year exists
+- gdp_growth_pct exists
+- No unexpected duplicate country_code + year combinations
+- Years remain correctly ordered
+- Countries are not accidentally mixed
+- NRU duplicate handling is correct
+- INX is removed
+- Raw data remains unchanged
+
+Expected processed dataset:
+
+6,084 rows
+39 columns
+
+If these values differ, investigate why instead of automatically assuming the difference is acceptable.
+
+--------------------------------------------------
+4. VERIFY COUNTRY/PANEL INTEGRITY
+--------------------------------------------------
+
+Perform explicit checks for:
+
+country_code + year uniqueness.
+
+For every country:
+
+- years must be correctly ordered
+- no duplicate year
+- no country should accidentally contain another country's data
+- temporal features must stay within the same country
+
+Pay special attention to:
+
+IND
+CHN
+USA
+JPN
+GBR
+NRU
+
+Verify that India, China, USA, Japan and UK each have the expected historical records.
+
+Generate a small verification table showing:
+
+country
+first year
+last year
+number of rows
+duplicate country-year count
+missing target count
+
+--------------------------------------------------
+5. VERIFY FEATURE ENGINEERING
+--------------------------------------------------
+
+Inspect every engineered feature.
+
+Especially verify:
+
+gdp_growth_lag1
+gdp_growth_lag2
+gdp_growth_lag3
+
+inflation_lag1
+unemployment_lag1
+exports_lag1
+imports_lag1
+
+gdp_growth_rolling_mean_3
+gdp_growth_rolling_std_3
+gdp_growth_rolling_mean_5
+inflation_rolling_mean_3
+
+trade_openness
+trade_balance_ratio
+log_gdp_usd
+log_population
+
+Do NOT only check that the columns exist.
+
+Manually verify several rows for:
+
+IND
+CHN
+USA
+JPN
+GBR
+
+For example:
+
+For country X and year 2010:
+
+gdp_growth_lag1 MUST equal the country's 2009 GDP growth.
+
+gdp_growth_lag2 MUST equal the country's 2008 GDP growth.
+
+gdp_growth_lag3 MUST equal the country's 2007 GDP growth.
+
+The same logic must hold for every country.
+
+Verify that no lag accidentally uses another country's value.
+
+--------------------------------------------------
+6. VERIFY ROLLING FEATURES
+--------------------------------------------------
+
+Explicitly verify that rolling features use ONLY historical observations.
+
+For a row at year T:
+
+rolling_mean_3 must use T-1, T-2 and T-3.
+
+It must NOT use:
+
+T
+T+1
+T+2
+
+Verify this with actual numerical examples from India and USA.
+
+--------------------------------------------------
+7. VERIFY IMPUTATION
+--------------------------------------------------
+
+Inspect the actual preprocessing implementation.
+
+Verify:
+
+- gdp_growth_pct is NEVER imputed
+- govt_debt_pct_gdp is treated separately
+- Category A/B imputation follows the documented strategy
+- global fallback statistics are calculated only from the training period
+- no target values are accidentally used during feature imputation
+
+Pay special attention to the documented bfill limitation.
+
+Determine whether any preprocessing operation uses future information that would be unavailable when making a real T+1 forecast.
+
+If there is any potential leakage, DO NOT silently fix it.
+
+Report it clearly as:
+
+CRITICAL
+WARNING
+ACCEPTABLE LIMITATION
+
+--------------------------------------------------
+8. VERIFY THE T+1 FORECASTING TARGET
+--------------------------------------------------
+
+Inspect:
+
+apps/api/ml/forecasting_target.py
+
+and:
+
+data/processed/master_panel_forecasting.csv
+
+The target must satisfy:
+
+For country C at year T:
+
+gdp_growth_next_year(T)
+=
+gdp_growth_pct(T+1)
+
+for the SAME country.
+
+Verify this automatically for ALL available rows.
+
+Do NOT only check India/USA.
+
+Check the entire dataset.
+
+The following must be true:
+
+For every valid target row:
+
+target(T) == actual_gdp_growth(T+1)
+
+within a very small floating-point tolerance.
+
+There must be NO country boundary leakage.
+
+--------------------------------------------------
+9. VERIFY 2025 BEHAVIOR
+--------------------------------------------------
+
+For every country with a 2025 row:
+
+gdp_growth_next_year must be NaN.
+
+2025 rows must NOT have a fabricated 2026 target.
+
+Verify:
+
+next_year_target_available == 0
+
+for 2025.
+
+--------------------------------------------------
+10. VERIFY T+1 TARGET WITH REAL EXAMPLES
+--------------------------------------------------
+
+Produce explicit examples for:
+
+India
+China
+USA
+Japan
+UK
+
+Use:
+
+2023
+2024
+2025
+
+Expected structure:
+
+Country | Feature Year | Current GDP Growth | Next-Year Target
+
+Example:
+
+India | 2023 | 7.210 | 7.099
+India | 2024 | 7.099 | 7.567
+India | 2025 | 7.567 | NaN
+
+Verify the same structure for all five countries.
+
+--------------------------------------------------
+11. VERIFY TEMPORAL SPLITS
+--------------------------------------------------
+
+Verify the intended forecasting split:
+
+TRAIN:
+Feature years 2000–2018
+
+VALIDATION:
+Feature years 2019–2022
+
+TEST:
+Feature years 2023–2024
+
+INFERENCE ONLY:
+Feature year 2025
+
+Confirm that the target years implied by the T+1 transformation are:
+
+TRAIN targets:
+2001–2019
+
+VALIDATION targets:
+2020–2023
+
+TEST targets:
+2024–2025
+
+2025 feature rows:
+2026 target unavailable
+
+Make sure no random train_test_split or random shuffle is being used.
+
+--------------------------------------------------
+12. CRITICAL LEAKAGE AUDIT
+--------------------------------------------------
+
+Perform a fresh leakage audit independently.
+
+Check for:
+
+1. Current-year GDP growth accidentally included as an input feature.
+2. Future-year GDP growth accidentally included as an input.
+3. T+1 target accidentally duplicated in a feature.
+4. Rolling windows including current-year target.
+5. Rolling windows including future-year target.
+6. Lag calculations crossing country boundaries.
+7. Imputation using validation/test information.
+8. Scaling using validation/test information.
+9. Feature selection using validation/test target information.
+10. Random splitting.
+11. Target-derived columns accidentally passed as predictors.
+12. Any 2025 future target being fabricated.
+
+The audit must report PASS/FAIL for every check.
+
+--------------------------------------------------
+13. VERIFY BASELINE MODEL COMPATIBILITY
+--------------------------------------------------
+
+Inspect:
+
+apps/api/ml/train_baseline.py
+
+Do NOT train it.
+
+Determine whether it is currently designed for:
+
+same-year prediction
+
+or
+
+strict T+1 prediction.
+
+If it still uses the old same-year target, report:
+
+"BASELINE TRAINING SCRIPT IS NOT YET COMPATIBLE WITH THE NEW T+1 FORECASTING DATASET."
+
+Do NOT modify it in this verification step unless a tiny non-functional test is absolutely necessary.
+
+We will handle model training separately after this audit.
+
+--------------------------------------------------
+14. VERIFY DATASET SCHEMAS
+--------------------------------------------------
+
+Compare:
+
+master_panel.csv
+master_panel_processed.csv
+master_panel_forecasting.csv
+
+Create a schema comparison.
+
+Report:
+
+- rows
+- columns
+- column names
+- target columns
+- engineered features
+- missingness
+- duplicate country-year pairs
+
+Make sure the forecasting dataset contains:
+
+gdp_growth_next_year
+next_year_target_available
+
+and does not accidentally replace the original:
+
+gdp_growth_pct
+
+--------------------------------------------------
+15. RUN ALL EXISTING TESTS
+--------------------------------------------------
+
+Run all relevant existing tests.
+
+For example:
+
+python -m pytest apps/api/tests -v
+
+If the entire test suite is too large or contains unrelated failures, identify which tests belong to Phase 11 and run those separately.
+
+Do NOT hide failures.
+
+Report:
+
+PASSED
+FAILED
+ERROR
+SKIPPED
+
+for each relevant test.
+
+--------------------------------------------------
+16. CREATE ADDITIONAL VERIFICATION TESTS IF NEEDED
+--------------------------------------------------
+
+If important checks are missing, create a focused test file:
+
+apps/api/tests/test_phase11_integration.py
+
+It should test:
+
+- country-year uniqueness
+- T+1 target correctness
+- 2025 target missingness
+- no cross-country target mapping
+- lag correctness
+- rolling feature correctness
+- temporal split correctness
+- raw dataset integrity
+
+Keep the tests deterministic.
+
+Do NOT create tests that merely check whether a file exists.
+
+Tests should verify actual values and logic.
+
+--------------------------------------------------
+17. DO NOT TRAIN ML MODELS
+--------------------------------------------------
+
+This is extremely important.
+
+DO NOT:
+
+- train Random Forest
+- train XGBoost
+- train Gradient Boosting
+- train Linear Regression
+- tune hyperparameters
+- generate final predictions
+- overwrite existing model files
+- change model architecture
+
+This step is ONLY:
+
+VERIFICATION + VALIDATION + INTEGRATION AUDIT.
+
+--------------------------------------------------
+18. DO NOT MODIFY RAW DATA
+--------------------------------------------------
+
+NEVER modify:
+
+data/raw/master_panel.csv
+
+The raw dataset must remain byte-for-byte unchanged.
+
+You may create:
+
+- reports
+- tests
+- logs
+- verification scripts
+
+but do not alter the raw dataset.
+
+--------------------------------------------------
+19. CREATE FINAL AUDIT REPORT
+--------------------------------------------------
+
+Create:
+
+docs/phase11/phase11_pre_training_verification_report.md
+
+The report must contain:
+
+1. Executive Summary
+2. Files Inspected
+3. Raw Dataset Integrity
+4. Preprocessing Verification
+5. Panel Integrity
+6. Feature Engineering Verification
+7. Rolling Feature Verification
+8. Imputation Verification
+9. T+1 Target Verification
+10. 2025 Inference Verification
+11. Temporal Split Verification
+12. Leakage Audit
+13. Existing Test Results
+14. Baseline Compatibility Assessment
+15. Problems Found
+16. Severity Classification
+17. Recommended Fixes
+18. Final Readiness Decision
+
+Use these final statuses:
+
+READY FOR ML TRAINING
+
+or
+
+READY WITH WARNINGS
+
+or
+
+NOT READY — FIX REQUIRED
+
+--------------------------------------------------
+20. FINAL RESPONSE FORMAT
+--------------------------------------------------
+
+At the end, give me a concise summary like:
+
+PHASE 11 PRE-TRAINING VERIFICATION
+
+Raw dataset:
+PASS / FAIL
+
+Preprocessing:
+PASS / FAIL
+
+Panel integrity:
+PASS / FAIL
+
+Feature engineering:
+PASS / FAIL
+
+T+1 target:
+PASS / FAIL
+
+2025 inference:
+PASS / FAIL
+
+Temporal split:
+PASS / FAIL
+
+Leakage audit:
+PASS / FAIL
+
+Tests:
+X passed / Y failed
+
+Baseline compatibility:
+READY / NOT READY
+
+Overall:
+READY FOR ML TRAINING
+or
+READY WITH WARNINGS
+or
+NOT READY — FIX REQUIRED
+
+IMPORTANT:
+Do not proceed to ML training even if everything passes.
+
+STOP after generating the verification report and final readiness decision.
+
+Wait for my approval before implementing the next ML training step."""
 EconoSphere AI -- Phase 11, Step 6: Forecasting Target Preparation
 ======================================================================
 Script   : apps/api/ml/forecasting_target.py

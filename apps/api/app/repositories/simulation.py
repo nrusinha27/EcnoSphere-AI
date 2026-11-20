@@ -21,7 +21,7 @@ class SimulationRepository:
             scenario_id=scenario_id,
             config=config,
             status=SimulationStatus.PENDING,
-            started_at=datetime.now(timezone.utc)
+            started_at=datetime.utcnow()
         )
         self.session.add(run)
         await self.session.commit()
@@ -52,7 +52,7 @@ class SimulationRepository:
             run.completed_at = completed_at
         elif status in [SimulationStatus.COMPLETED, SimulationStatus.FAILED, SimulationStatus.PAUSED]:
             if status in [SimulationStatus.COMPLETED, SimulationStatus.FAILED]:
-                run.completed_at = datetime.now(timezone.utc)
+                run.completed_at = datetime.utcnow()
         self.session.add(run)
         await self.session.commit()
         await self.session.refresh(run)
@@ -73,7 +73,7 @@ class SimulationRepository:
         snapshot = SimulationSnapshot(
             run_id=run_id,
             horizon_days=horizon_days,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.utcnow(),
             global_state=global_state,
             active_shocks=active_shocks
         )
@@ -101,7 +101,7 @@ class SimulationRepository:
         """Records an audit or execution log entry for a simulation run."""
         log_entry = SimulationLog(
             run_id=run_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.utcnow(),
             component=component,
             message=message,
             severity=severity,

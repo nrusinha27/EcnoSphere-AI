@@ -1,0 +1,77 @@
+{
+  "backup_timestamp_utc": "2026-10-19T09:14:00Z",
+  "files": [
+    {
+      "file": "apps/api/app/api/v1/endpoints/graph.py",
+      "sha256": "45BCCA474CF1F443CC5BB723A9066E3F13600B069F23B73EE8B28A29A585FA7B",
+      "bytes": 1933,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\app\\api\\v1\\endpoints\\graph.py"
+    },
+    {
+      "file": "apps/api/app/repositories/graph.py",
+      "sha256": "827E4F6B57B7346CF01896BE64C0DD95FE84ED9B499B2823F7432A710A0BB8B6",
+      "bytes": 12916,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\app\\repositories\\graph.py"
+    },
+    {
+      "file": "apps/api/app/services/graph.py",
+      "sha256": "C275DB209FAB37E66AEE7986D642CDF08928BB3D1C98378BB66DA7840977CB07",
+      "bytes": 1485,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\app\\services\\graph.py"
+    },
+    {
+      "file": "apps/api/migrations/env.py",
+      "sha256": "5319C763F8E93608C4A4CC75BBB24D5EE21733446BA120830FF2727ADB966A34",
+      "bytes": 3244,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\migrations\\env.py"
+    },
+    {
+      "file": "apps/api/scripts/seed_neo4j_trade.py",
+      "sha256": "EF717D6F7576B43E4D3E35FA59FBE16026BD08C9F6FE8949E36A18818378D18D",
+      "bytes": 14743,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\scripts\\seed_neo4j_trade.py"
+    },
+    {
+      "file": "apps/web/src/app/dashboard/trade/network/page.tsx",
+      "sha256": "66AA7635971F59E2EF6039B408A48FBA3CE4031EC920D68AFBC126B8DBB4EAE8",
+      "bytes": 23355,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\web\\src\\app\\dashboard\\trade\\network\\page.tsx"
+    },
+    {
+      "file": "apps/web/src/components/charts/TradeGraph.tsx",
+      "sha256": "F334046021F7A569028D22DC3F46D469AE713F6F9904C0C61FDDA37DD4245B1B",
+      "bytes": 8491,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\web\\src\\components\\charts\\TradeGraph.tsx"
+    },
+    {
+      "file": "apps/web/src/hooks/useGraph.ts",
+      "sha256": "55F6DB3F30B73A8ACCE820B618B089A829560231DDF930469B97E4E56497C6C9",
+      "bytes": 3665,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\web\\src\\hooks\\useGraph.ts"
+    },
+    {
+      "file": "apps/api/app/models/trade.py",
+      "sha256": "D992FCA414BB7F869DB5960E594400B6E4C623C0713B9534016CEE4356C740D9",
+      "bytes": 3139,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\app\\models\\trade.py"
+    },
+    {
+      "file": "apps/api/migrations/versions/c3d4e5f6a7b8_add_trade_flows_table.py",
+      "sha256": "2BEA45AEC466FC7F9339B1AD23CE743BEA36D9D9F0E7810AED6F4C0D5A98C82B",
+      "bytes": 3595,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\migrations\\versions\\c3d4e5f6a7b8_add_trade_flows_table.py"
+    },
+    {
+      "file": "apps/api/ml/scripts/download/ingest_real_trade.py",
+      "sha256": "6603AD8D55C5A09C1243B0EF493E4E58CE30BE4D66E8B21079658DF6C49E0DAB",
+      "bytes": 35364,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\ml\\scripts\\download\\ingest_real_trade.py"
+    },
+    {
+      "file": "apps/api/tests/test_phase22_trade_foundation.py",
+      "sha256": "72AB1356A0E88C7C05FF77EC7E3EF010CDC77BE81F823AD17AD04D06B0C9C6D9",
+      "bytes": 22190,
+      "backup_path": "backups\\phase22_pre_unblocking\\apps\\api\\tests\\test_phase22_trade_foundation.py"
+    }
+  ]
+}

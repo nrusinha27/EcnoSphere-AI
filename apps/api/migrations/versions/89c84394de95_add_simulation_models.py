@@ -56,12 +56,14 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_simulation_snapshots_id'), 'simulation_snapshots', ['id'], unique=False)
-    op.create_index(op.f('ix_countries_iso3'), 'countries', ['iso3'], unique=False)
+    # Defect fix: ix_countries_iso3 already created in e3f3f11caa73_initial_migration
+    op.create_index(op.f('ix_countries_iso3'), 'countries', ['iso3'], unique=False, if_not_exists=True)
     op.alter_column('scenario_events', 'parameters',
                existing_type=postgresql.JSONB(astext_type=sa.Text()),
                type_=sa.JSON(),
                nullable=False)
-    op.drop_column('scenario_versions', 'notes')
+    # Defect fix: 'notes' column only existed on legacy dev DB; guard drop if present
+    op.execute("ALTER TABLE scenario_versions DROP COLUMN IF EXISTS notes;")
     op.alter_column('scenarios', 'description',
                existing_type=sa.TEXT(),
                type_=sa.String(length=1024),
@@ -76,16 +78,20 @@ def downgrade() -> None:
                existing_type=sa.String(length=1024),
                type_=sa.TEXT(),
                existing_nullable=True)
-    op.add_column('scenario_versions', sa.Column('notes', sa.TEXT(), autoincrement=False, nullable=True))
+    # Defect fix: do not re-add extraneous 'notes' column on downgrade
+    # op.add_column('scenario_versions', sa.Column('notes', sa.TEXT(), autoincrement=False, nullable=True))
     op.alter_column('scenario_events', 'parameters',
                existing_type=sa.JSON(),
                type_=postgresql.JSONB(astext_type=sa.Text()),
                nullable=True)
-    op.drop_index(op.f('ix_countries_iso3'), table_name='countries')
+    # Defect fix: do not drop ix_countries_iso3 which belongs to e3f3f11caa73_initial_migration
+    # op.drop_index(op.f('ix_countries_iso3'), table_name='countries')
     op.drop_index(op.f('ix_simulation_snapshots_id'), table_name='simulation_snapshots')
     op.drop_table('simulation_snapshots')
     op.drop_index(op.f('ix_simulation_logs_id'), table_name='simulation_logs')
     op.drop_table('simulation_logs')
     op.drop_index(op.f('ix_simulation_runs_id'), table_name='simulation_runs')
     op.drop_table('simulation_runs')
+    op.execute("DROP TYPE IF EXISTS simulationstatus CASCADE;")
+    op.execute("DROP TYPE IF EXISTS logseverity CASCADE;")
     # ### end Alembic commands ###

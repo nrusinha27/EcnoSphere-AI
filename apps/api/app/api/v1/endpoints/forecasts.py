@@ -33,7 +33,12 @@ Security policy (Step 2):
 """
 import time
 import logging
+import math
+import os
+import pandas as pd
+from pathlib import Path
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, status
 from app.schemas.forecast import (
@@ -47,6 +52,92 @@ import structlog
 router = APIRouter()
 
 logger = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# Country defaults cache (computed once at module load)
+# ---------------------------------------------------------------------------
+
+_COUNTRY_DEFAULTS: Optional[Dict[str, Any]] = None
+
+def _build_country_defaults() -> Dict[str, Any]:
+    """
+    Build per-country default feature values from master_panel.csv.
+    Uses 2025 data (or latest available year) for the 5 forecast countries.
+    Computes all 31 features including lags, rolling stats, and derived values.
+    """
+    base_path = Path(__file__).resolve().parents[6]  # project root
+    csv_path = base_path / "data" / "raw" / "master_panel.csv"
+    if not csv_path.exists():
+        # Fallback: try relative from cwd
+        csv_path = Path("../../data/raw/master_panel.csv")
+
+    df = pd.read_csv(str(csv_path))
+    countries = ["CHN", "GBR", "IND", "JPN", "USA"]
+    df = df.sort_values(["country_code", "year"]).reset_index(drop=True)
+
+    # Compute lag and rolling features per country
+    for c in countries:
+        mask = df["country_code"] == c
+        df.loc[mask, "gdp_growth_lag1"] = df.loc[mask, "gdp_growth_pct"].shift(1)
+        df.loc[mask, "gdp_growth_lag2"] = df.loc[mask, "gdp_growth_pct"].shift(2)
+        df.loc[mask, "gdp_growth_lag3"] = df.loc[mask, "gdp_growth_pct"].shift(3)
+        df.loc[mask, "inflation_lag1"] = df.loc[mask, "inflation_cpi_pct"].shift(1)
+        df.loc[mask, "unemployment_lag1"] = df.loc[mask, "unemployment_pct"].shift(1)
+        df.loc[mask, "exports_lag1"] = df.loc[mask, "exports_pct_gdp"].shift(1)
+        df.loc[mask, "imports_lag1"] = df.loc[mask, "imports_pct_gdp"].shift(1)
+        df.loc[mask, "gdp_growth_rolling_mean_3"] = df.loc[mask, "gdp_growth_pct"].rolling(3).mean()
+        df.loc[mask, "gdp_growth_rolling_std_3"] = df.loc[mask, "gdp_growth_pct"].rolling(3).std()
+        df.loc[mask, "gdp_growth_rolling_mean_5"] = df.loc[mask, "gdp_growth_pct"].rolling(5).mean()
+        df.loc[mask, "gdp_growth_rolling_std_5"] = df.loc[mask, "gdp_growth_pct"].rolling(5).std()
+        df.loc[mask, "inflation_rolling_mean_3"] = df.loc[mask, "inflation_cpi_pct"].rolling(3).mean()
+        df.loc[mask, "inflation_rolling_std_3"] = df.loc[mask, "inflation_cpi_pct"].rolling(3).std()
+
+    df["trade_openness"] = (df["exports_pct_gdp"] + df["imports_pct_gdp"]) / 100.0
+    df["trade_balance_ratio"] = (df["exports_pct_gdp"] - df["imports_pct_gdp"]) / 100.0
+    df["log_gdp_usd"] = df["gdp_current_usd"].apply(lambda x: math.log(x) if x and x > 0 else None)
+    df["log_population"] = df["population_total"].apply(lambda x: math.log(x) if x and x > 0 else None)
+
+    FEATURE_COLS = [
+        "exchange_rate_lcu_usd", "tariff_rate_pct", "remittances_usd", "fdi_net_inflow_usd",
+        "unemployment_pct", "imports_pct_gdp", "tax_revenue_pct_gdp", "exports_pct_gdp",
+        "interest_rate_pct", "reserves_usd", "current_account_pct_gdp", "inflation_cpi_pct",
+        "population_total", "gdp_current_usd", "gdp_growth_lag1", "gdp_growth_lag2", "gdp_growth_lag3",
+        "inflation_lag1", "unemployment_lag1", "exports_lag1", "imports_lag1",
+        "gdp_growth_rolling_mean_3", "gdp_growth_rolling_std_3", "gdp_growth_rolling_mean_5",
+        "inflation_rolling_mean_3", "trade_openness", "trade_balance_ratio", "log_gdp_usd",
+        "log_population", "gdp_growth_rolling_std_5", "inflation_rolling_std_3",
+    ]
+
+    result = {}
+    country_names = {"CHN": "China", "GBR": "United Kingdom", "IND": "India", "JPN": "Japan", "USA": "United States"}
+    for c in countries:
+        sub = df[df["country_code"] == c]
+        if sub.empty:
+            continue
+        latest_year = int(sub["year"].max())
+        row = sub[sub["year"] == latest_year].iloc[0]
+        vals: Dict[str, Any] = {}
+        for col in FEATURE_COLS:
+            v = row.get(col, None)
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                vals[col] = None
+            else:
+                vals[col] = round(float(v), 6)
+        result[c] = {
+            "country_code": c,
+            "country_name": country_names.get(c, c),
+            "feature_year": latest_year,
+            "features": vals,
+            "null_features": [k for k, v in vals.items() if v is None],
+        }
+    return result
+
+
+def _get_defaults() -> Dict[str, Any]:
+    global _COUNTRY_DEFAULTS
+    if _COUNTRY_DEFAULTS is None:
+        _COUNTRY_DEFAULTS = _build_country_defaults()
+    return _COUNTRY_DEFAULTS
 
 # ---------------------------------------------------------------------------
 # Standard forecast artifact endpoints (unchanged from Step 1)
@@ -188,10 +279,15 @@ async def predict_gdp(request: InferenceRequest) -> InferenceResponse:
             request_timestamp=_request_ts,
         )
 
+        pred_float = float(prediction)
         return InferenceResponse(
             country=request.country,
             year=request.year,
-            predicted_gdp_growth=prediction,
+            predicted_gdp_growth=pred_float,
+            lower_bound_90=pred_float - 11.4507,
+            upper_bound_90=pred_float + 11.4507,
+            interval_width=2 * 11.4507,
+            q90=11.4507,
             model_version=meta["model_version"],
             production_status=meta["status"],
         )
@@ -331,6 +427,47 @@ async def get_production_readiness() -> dict:
                 "model_available": False,
             },
         }
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — What-if inference defaults endpoint
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/defaults/{country_code}",
+    summary="Get 2025 feature defaults for what-if GDP inference",
+    description=(
+        "Returns the 2025 (or latest available) historical feature values for a given country, "
+        "ready to pre-populate the interactive what-if GDP forecasting form. "
+        "All 31 model features are returned. Null values indicate the feature is missing for that "
+        "country-year and will be imputed by the model's median imputer at inference time."
+    ),
+)
+async def get_country_defaults(country_code: str) -> dict:
+    """Return per-country 2025 feature defaults for the what-if inference form."""
+    normalized = country_code.upper().strip()
+    if not normalized.isalpha() or len(normalized) != 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid country code '{country_code}'. Expected ISO 3166-1 alpha-3 (3 letters).",
+        )
+    try:
+        defaults = _get_defaults()
+    except Exception:
+        logger.error("defaults_load_error", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not load country defaults from master panel data.",
+        )
+    if normalized not in defaults:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No defaults available for '{normalized}'. "
+                f"Available: CHN, GBR, IND, JPN, USA."
+            ),
+        )
+    return defaults[normalized]
 
 
 # ---------------------------------------------------------------------------

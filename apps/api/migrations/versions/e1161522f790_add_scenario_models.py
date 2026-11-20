@@ -67,4 +67,6 @@ def downgrade() -> None:
     op.drop_table('scenario_events')
     op.drop_table('scenario_versions')
     op.drop_table('scenarios')
+    op.execute("DROP TYPE IF EXISTS eventcategory CASCADE;")
+    op.execute("DROP TYPE IF EXISTS eventstatus CASCADE;")
     # ### end Alembic commands ###

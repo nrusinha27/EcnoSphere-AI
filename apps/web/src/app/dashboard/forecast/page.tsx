@@ -26,9 +26,11 @@ import {
   useAnomalies,
   type ForecastPrediction,
 } from "@/hooks/useAI";
-import { useMLForecasts, useMLForecast } from "@/hooks/useMLForecast";
+import { useMLForecasts, useMLForecast, type InferenceResponse } from "@/hooks/useMLForecast";
 import { GDPForecastCard } from "@/components/forecast/GDPForecastCard";
 import { ForecastComparisonTable } from "@/components/forecast/ForecastComparisonTable";
+import { WhatIfForecastForm } from "@/components/forecast/WhatIfForecastForm";
+import { WhatIfResultsPanel } from "@/components/forecast/WhatIfResultsPanel";
 
 const SUPPORTED_COUNTRIES = ["USA", "CHN", "DEU", "JPN", "IND", "GBR", "BRA", "FRA", "CAN", "AUS"];
 const SUPPORTED_MODELS = ["XGBOOST", "TRANSFORMER", "GNN", "LIGHTGBM", "VAR", "RL"];
@@ -51,6 +53,21 @@ export default function AIForecastDashboard() {
   const [selectedExplainPrediction, setSelectedExplainPrediction] = useState<ForecastPrediction | null>(null);
 
   const [selectedMLIso, setSelectedMLIso] = useState<string>("USA");
+
+  // Stage 2: What-If Scenario State
+  const [whatIfScenarioResult, setWhatIfScenarioResult] = useState<InferenceResponse | null>(null);
+  const [whatIfBaselineResult, setWhatIfBaselineResult] = useState<InferenceResponse | null>(null);
+  const [whatIfChanges, setWhatIfChanges] = useState<Record<string, { from: number | null; to: number }>>({});
+
+  const handleWhatIfResult = (
+    scenario: InferenceResponse | null,
+    baseline: InferenceResponse | null,
+    changes: Record<string, { from: number | null; to: number }>
+  ) => {
+    setWhatIfScenarioResult(scenario);
+    setWhatIfBaselineResult(baseline);
+    setWhatIfChanges(changes);
+  };
 
   // Production ML Forecast Data
   const { data: mlListResponse, isLoading: mlLoading, error: mlError } = useMLForecasts();
@@ -382,6 +399,34 @@ export default function AIForecastDashboard() {
             </div>
           </div>
         ) : null}
+
+        {/* Stage 2: Interactive What-If Scenario Explorer */}
+        <div className="mt-8 pt-8 border-t border-slate-800">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-5 h-5 text-blue-400" />
+            <h3 className="text-xl font-bold text-white tracking-tight">
+              Interactive What-If GDP Scenario Explorer
+            </h3>
+            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
+              Real Model Inference
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mb-6">
+            Modify any of the 11 primary economic indicators to run real-time inference through the frozen Phase 11 HistGradientBoostingRegressor model pipeline.
+          </p>
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+            <div className="xl:col-span-6">
+              <WhatIfForecastForm onResult={handleWhatIfResult} />
+            </div>
+            <div className="xl:col-span-6">
+              <WhatIfResultsPanel
+                scenarioResult={whatIfScenarioResult}
+                baselineResult={whatIfBaselineResult}
+                changes={whatIfChanges}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ================================================================= */}
