@@ -56,6 +56,42 @@ class BaseMLModel(AbstractModel):
         p90 = round(p50 + delta, 4)
         return ConfidenceInterval(lower_bound_p10=p10, median_p50=round(p50, 4), upper_bound_p90=p90)
 
+    def compute_horizon_drift(self, p50_base: float, horizon: ForecastHorizon, indicator: str, trend_dir: float = 0.05) -> float:
+        """
+        Calculates dynamic macroeconomic trajectory progression across multi-year temporal horizons.
+        Accounts for mean reversion, monetary transmission lag, and long-run structural equilibrium.
+        """
+        horizon_steps = {
+            ForecastHorizon.MONTHS_3: 0.0,
+            ForecastHorizon.MONTHS_6: 0.35,
+            ForecastHorizon.YEAR_1: 0.75,
+            ForecastHorizon.YEARS_3: 1.40,
+            ForecastHorizon.YEARS_5: 2.10,
+        }
+        step = horizon_steps.get(horizon, 0.0)
+
+        # Indicator-specific equilibrium targets and drift dynamics
+        lower_ind = indicator.lower()
+        if "growth" in lower_ind:
+            target_eq = 2.45
+            drift = (target_eq - p50_base) * (1.0 - math.exp(-0.25 * step))
+            return round(p50_base + drift, 4)
+        elif "inflation" in lower_ind:
+            target_eq = 2.00
+            drift = (target_eq - p50_base) * (1.0 - math.exp(-0.35 * step))
+            return round(p50_base + drift, 4)
+        elif "unemployment" in lower_ind:
+            target_eq = 4.80
+            drift = (target_eq - p50_base) * (1.0 - math.exp(-0.20 * step))
+            return round(p50_base + drift, 4)
+        elif "interest" in lower_ind:
+            target_eq = 3.50
+            drift = (target_eq - p50_base) * (1.0 - math.exp(-0.30 * step))
+            return round(p50_base + drift, 4)
+        else:
+            # Gradual compounded structural trend
+            return round(p50_base * (1.0 + trend_dir * (step / 2.0)), 4)
+
     def generate_default_feature_importance(self, features: Dict[str, Any], indicator: str) -> Dict[str, float]:
         """Extracts normalized importance percentage contributions from incoming feature dictionary."""
         importance = {}

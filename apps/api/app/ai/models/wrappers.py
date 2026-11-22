@@ -30,9 +30,10 @@ class XGBoostModel(BaseMLModel):
         tariff_shock = features.get("shock_delta_tariff", 0.0)
         betweenness = features.get("graph_betweenness_centrality", 0.12)
         
-        # Calculate expected trend delta
+        # Calculate expected trend delta and multi-horizon temporal progression
         trend = (current_val - lag_val) * 0.4 - (tariff_shock * betweenness * 1.5)
-        p50 = round(current_val + trend, 4)
+        base_p50 = current_val + trend
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.04)
         
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.09)
         importance = self.generate_default_feature_importance(features, indicator)
@@ -61,7 +62,8 @@ class LightGBMModel(BaseMLModel):
         base_key = indicator.lower().replace(" ", "_").replace("-", "_")
         current_val = features.get(f"{base_key}_current", 2.5)
         mom = features.get(f"{base_key}_mom_growth", 0.0)
-        p50 = round(current_val * (1.0 + (mom / 100.0) * 0.5), 4)
+        base_p50 = current_val * (1.0 + (mom / 100.0) * 0.5)
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.03)
         
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.08)
         importance = self.generate_default_feature_importance(features, indicator)
@@ -93,7 +95,8 @@ class TransformerModel(BaseMLModel):
         pagerank = features.get("graph_pagerank_influence", 0.045)
         
         # Self-attention sequence estimation focusing on global sovereign influence
-        p50 = round(0.7 * current_val + 0.3 * sma + (pagerank * 0.5), 4)
+        base_p50 = 0.7 * current_val + 0.3 * sma + (pagerank * 0.5)
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.05)
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.06)
         importance = self.generate_default_feature_importance(features, indicator)
         
@@ -123,8 +126,9 @@ class GNNModel(BaseMLModel):
         hhi = features.get("graph_import_hhi_concentration", 0.28)
         exposure = features.get("derived_trade_exposure_index", 3.36)
         
-        # Graph Neural Network propagation function
-        p50 = round(current_val - (hhi * exposure * 0.05), 4)
+        # Graph Neural Network propagation function with temporal decay of trade shock bottlenecks
+        base_p50 = current_val - (hhi * exposure * 0.05)
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.06)
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.10)
         importance = self.generate_default_feature_importance(features, indicator)
         
@@ -154,7 +158,8 @@ class EconometricVARModel(BaseMLModel):
         lag_12 = features.get(f"{base_key}_lag_12", current_val)
         
         # Classical auto-regressive AR(12) estimation
-        p50 = round(current_val * 0.85 + lag_12 * 0.15, 4)
+        base_p50 = current_val * 0.85 + lag_12 * 0.15
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.02)
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.14)
         importance = self.generate_default_feature_importance(features, indicator)
         
@@ -184,7 +189,8 @@ class ReinforcementLearningModel(BaseMLModel):
         solvency = features.get("derived_solvency_ratio", 26.0)
         
         # RL actor-critic reward evaluation simulation
-        p50 = round(current_val * (1.02 if solvency < 40 else 0.98), 4)
+        base_p50 = current_val * (1.02 if solvency < 40 else 0.98)
+        p50 = self.compute_horizon_drift(base_p50, horizon, indicator, trend_dir=0.035)
         interval = self.compute_uncertainty_interval(p50, horizon, volatility_factor=0.11)
         importance = self.generate_default_feature_importance(features, indicator)
         

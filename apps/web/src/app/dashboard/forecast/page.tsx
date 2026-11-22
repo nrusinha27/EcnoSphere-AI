@@ -100,6 +100,23 @@ export default function AIForecastDashboard() {
     setTimeout(() => setForceRefresh(false), 500);
   };
 
+  const handleCountryChange = (iso: string) => {
+    setSelectedIso(iso);
+    // Automatically synchronize country selection with Phase 11 card if available
+    if (mlListResponse?.metadata.available_countries.includes(iso)) {
+      setSelectedMLIso(iso);
+    }
+  };
+
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    // Smooth scroll down to the Generative AI section so the user sees the active model in action
+    const target = document.getElementById("ai-generative-section");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   useEffect(() => {
     if (predictions.length > 0) {
       const match =
@@ -143,8 +160,8 @@ export default function AIForecastDashboard() {
         formatter: (params: Array<{ axisValue: string; seriesName: string; value: number | string }>) => {
           let str = `<div class="font-bold border-b border-slate-700 pb-1 mb-1">${params[0].axisValue} Projection</div>`;
           params.forEach(p => {
-            const color = p.seriesName === "Median Expectation (P50)" ? "#38bdf8" : "#94a3b8";
-            str += `<div class="flex justify-between items-center my-1"><span style="color:${color}; font-weight:600;">${p.seriesName}:</span> <span class="ml-4 font-mono">${p.value}</span></div>`;
+            const color = p.seriesName.includes("P50") ? "#38bdf8" : p.seriesName.includes("P90") ? "#a855f7" : "#3b82f6";
+            str += `<div class="flex justify-between items-center my-1"><span style="color:${color}; font-weight:600;">${p.seriesName}:</span> <span class="ml-4 font-mono font-bold">${typeof p.value === 'number' ? p.value.toFixed(2) : p.value}%</span></div>`;
           });
           return str;
         }
@@ -165,34 +182,26 @@ export default function AIForecastDashboard() {
       yAxis: {
         type: "value",
         splitLine: { lineStyle: { color: "rgba(51, 65, 85, 0.4)", type: "dashed" } },
-        axisLabel: { color: "#cbd5e1" }
+        axisLabel: { color: "#cbd5e1", formatter: '{value}%' }
       },
       series: [
-        {
-          name: "Upper Bound (P90)",
-          type: "line",
-          data: p90,
-          lineStyle: { opacity: 0 },
-          stack: "confidence-band",
-          symbol: "none"
-        },
         {
           name: "Lower Bound (P10)",
           type: "line",
           data: p10,
-          lineStyle: { opacity: 0 },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(56, 189, 248, 0.3)" },
-                { offset: 1, color: "rgba(56, 189, 248, 0.05)" }
-              ]
-            }
-          },
-          stack: "confidence-band",
-          symbol: "none"
+          lineStyle: { opacity: 0.6, width: 1, type: "dashed", color: "#38bdf8" },
+          symbol: "circle",
+          symbolSize: 4,
+          itemStyle: { color: "#38bdf8" }
+        },
+        {
+          name: "Upper Bound (P90)",
+          type: "line",
+          data: p90,
+          lineStyle: { opacity: 0.6, width: 1, type: "dashed", color: "#a855f7" },
+          symbol: "circle",
+          symbolSize: 4,
+          itemStyle: { color: "#a855f7" }
         },
         {
           name: "Median Expectation (P50)",
@@ -290,7 +299,7 @@ export default function AIForecastDashboard() {
             <span className="text-xs font-semibold text-slate-400 uppercase">Country:</span>
             <select
               value={selectedIso}
-              onChange={(e) => setSelectedIso(e.target.value)}
+              onChange={(e) => handleCountryChange(e.target.value)}
               className="bg-transparent text-sm font-bold text-cyan-300 focus:outline-none cursor-pointer"
             >
               {SUPPORTED_COUNTRIES.map(iso => (
@@ -301,11 +310,12 @@ export default function AIForecastDashboard() {
 
           <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-1.5 shadow-inner">
             <Cpu className="w-4 h-4 text-purple-400" />
-            <span className="text-xs font-semibold text-slate-400 uppercase">Model:</span>
+            <span className="text-xs font-semibold text-slate-400 uppercase">AI Architecture:</span>
             <select
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
+              onChange={(e) => handleModelChange(e.target.value)}
               className="bg-transparent text-sm font-bold text-purple-300 focus:outline-none cursor-pointer"
+              title="Select ML/DL architecture for Generative AI Projections and TreeSHAP feature explanations below"
             >
               {SUPPORTED_MODELS.map(mod => (
                 <option key={mod} value={mod} className="bg-slate-900 text-white">{mod}</option>
@@ -338,13 +348,18 @@ export default function AIForecastDashboard() {
       {/* PHASE 11: PRODUCTION ML FORECAST PIPELINE (LOCKED)              */}
       {/* ================================================================= */}
       <div className="mb-12">
-        <div className="flex items-center gap-2 mb-6 pb-2 border-b border-slate-800">
-          <FlaskConical className="w-6 h-6 text-blue-400" />
-          <h2 className="text-2xl font-bold text-white tracking-tight">
-            Official Production ML Forecast
-          </h2>
-          <span className="ml-3 px-2 py-0.5 text-xs font-bold uppercase tracking-widest bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
-            Phase 11
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 pb-2 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="w-6 h-6 text-blue-400" />
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              Official Production ML Forecast
+            </h2>
+            <span className="ml-2 px-2 py-0.5 text-xs font-bold uppercase tracking-widest bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
+              Phase 11 Locked Benchmark
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            HistGradientBoosting (Audited 2000–2025 WDI, RMSE: 3.9113)
           </span>
         </div>
 
@@ -432,11 +447,14 @@ export default function AIForecastDashboard() {
       {/* ================================================================= */}
       {/* PHASE 10: GENERATIVE AI & DECISION INTELLIGENCE                   */}
       {/* ================================================================= */}
-      <div className="flex items-center gap-2 mb-6 pb-2 border-b border-slate-800">
+      <div id="ai-generative-section" className="flex items-center gap-2 mb-6 pb-2 border-b border-slate-800 scroll-mt-6">
         <Brain className="w-6 h-6 text-purple-400" />
         <h2 className="text-2xl font-bold text-white tracking-tight">
           Generative AI Intelligence
         </h2>
+        <span className="ml-2 px-2 py-0.5 text-xs font-bold uppercase tracking-widest bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded">
+          Active: {selectedModel}
+        </span>
       </div>
 
       {/* Top Banner: Active Model Profile & Trajectory Tag */}

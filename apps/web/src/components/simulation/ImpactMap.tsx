@@ -11,6 +11,19 @@ interface ImpactMapProps {
   activeShocks?: Record<string, any>;
 }
 
+const COUNTRY_LABELS: Record<string, string> = {
+  USA: 'United States',
+  CHN: 'China',
+  IND: 'India',
+  DEU: 'Germany',
+  JPN: 'Japan',
+  GBR: 'United Kingdom',
+  FRA: 'France',
+  BRA: 'Brazil',
+  AUS: 'Australia',
+  CAN: 'Canada'
+};
+
 export function ImpactMap({ currentHorizon = 0, isRunning = false, globalState, activeShocks }: ImpactMapProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -42,24 +55,55 @@ export function ImpactMap({ currentHorizon = 0, isRunning = false, globalState, 
     );
   }
 
-  // Derive dynamic economic stability scores directly from live backend simulation global_state
+  // Derive dynamic economic stability scores directly from live backend simulation global_state and active_shocks
   const countryEntries = Object.entries(globalState);
   const data = countryEntries.slice(0, 10).map(([iso, metrics]: [string, any]) => {
-    const gdp = Number(metrics?.gdp) || 0;
-    const inflation = Number(metrics?.inflation) || 0.02;
-    const unemployment = Number(metrics?.unemployment) || 0.05;
+    const rawGdp = Number(metrics?.gdp) || 0;
+    const rawInflation = Number(metrics?.inflation) ?? 2.0;
+    const rawUnemployment = Number(metrics?.unemployment) ?? 5.0;
+
+    // Normalize percentages if received as whole numbers (e.g., 2.5% vs 0.025)
+    const inflation = rawInflation > 1 ? rawInflation / 100 : rawInflation;
+    const unemployment = rawUnemployment > 1 ? rawUnemployment / 100 : rawUnemployment;
     
-    // Quantitative heuristic: Stability index penalized by inflation > 2% and unemployment > 5%
-    const inflationPenalty = Math.max(0, (inflation - 0.02) * 250);
-    const unemploymentPenalty = Math.max(0, (unemployment - 0.05) * 120);
-    const val = Math.max(10, Math.min(100, Math.round(88 - inflationPenalty - unemploymentPenalty)));
+    // Country-specific active shocks
+    const shock = activeShocks?.[iso] || {};
+    const exportReduction = Math.abs(Number(shock.export_reduction) || 0);
+    const inflationSpike = Number(shock.inflation_increase) || 0;
+
+    // Temporal crisis decay factor: Day 1-180 peak crisis, Day 365 50% recovery, Day 1095 90% recovery
+    const recoveryRatio = currentHorizon <= 180 ? 0.0 : currentHorizon === 365 ? 0.50 : 0.90;
+    const effectiveExportShock = exportReduction * (1.0 - recoveryRatio);
+    const effectiveInfShock = inflationSpike * (1.0 - recoveryRatio);
+
+    // Crisis stability model:
+    // - Base normal stability: 82
+    // - Export collapse penalty: up to 18-20 pts
+    // - Inflation surge penalty: up to 15 pts
+    // - Macro rate penalty: inflation above 2%
+    // - GDP resilience benefit: (rawGdp - 1.25) * 14
+    const exportPenalty = effectiveExportShock * 30.0;
+    const infShockPenalty = effectiveInfShock * 22.0;
+    const macroPenalty = Math.max(0, (inflation - 0.02) * 200.0);
+    const unemploymentPenalty = Math.max(0, (unemployment - 0.05) * 120.0);
+    const gdpResilience = rawGdp > 0 ? (rawGdp - 1.25) * 14.0 : 0;
+
+    const score = Math.round(82 - exportPenalty - infShockPenalty - macroPenalty - unemploymentPenalty + gdpResilience);
+    const val = Math.max(10, Math.min(100, score));
     
     return {
       name: iso,
+      fullName: COUNTRY_LABELS[iso] || iso,
       value: val,
-      metrics: { gdp, inflation, unemployment },
+      metrics: {
+        gdp: rawGdp,
+        inflation,
+        unemployment,
+        exportReduction,
+        inflationSpike
+      },
       itemStyle: {
-        color: val > 75 ? '#10b981' : val > 60 ? '#f59e0b' : '#ef4444'
+        color: val > 75 ? '#10b981' : val >= 60 ? '#f59e0b' : '#ef4444'
       }
     };
   });
@@ -72,10 +116,33 @@ export function ImpactMap({ currentHorizon = 0, isRunning = false, globalState, 
       formatter: (params: Array<any>) => {
         const item = params[0];
         const m = item?.data?.metrics || {};
-        return `<div class="font-bold border-b border-slate-700 pb-1 mb-1">Economic Node: ${item.name}</div>
-                <div>Stability Index: <span class="font-mono font-bold">${item.value}</span> / 100</div>
-                <div class="text-xs mt-1 text-slate-400">Inflation Rate: ${((m.inflation || 0) * 100).toFixed(2)}%</div>
-                <div class="text-xs text-slate-400">Unemployment: ${((m.unemployment || 0) * 100).toFixed(2)}%</div>`;
+        const fullName = item?.data?.fullName || item.name;
+        const val = item.value;
+        const statusBadge = val > 75
+          ? '<span style="color:#10b981;font-weight:600;">● STABLE (Low Risk)</span>'
+          : val >= 60
+          ? '<span style="color:#f59e0b;font-weight:600;">● WATCH (Elevated Shock)</span>'
+          : '<span style="color:#ef4444;font-weight:600;">● AT RISK (High Vulnerability)</span>';
+
+        let shockDetails = '';
+        if (m.exportReduction > 0) {
+          shockDetails += `<div class="text-xs text-rose-400">Trade Shock: -${(m.exportReduction * 100).toFixed(0)}% exports</div>`;
+        }
+        if (m.inflationSpike > 0) {
+          shockDetails += `<div class="text-xs text-amber-400">Price Shock: +${(m.inflationSpike * 100).toFixed(1)}% inflation surge</div>`;
+        }
+        if (!shockDetails) {
+          shockDetails = '<div class="text-xs text-slate-400">Status: Nominal transmission channel</div>';
+        }
+
+        return `<div class="font-bold border-b border-slate-700 pb-1 mb-1 text-sm">${fullName} (${item.name})</div>
+                <div class="mb-1 text-xs">${statusBadge}</div>
+                <div class="text-xs">Stability Index: <span class="font-mono font-bold text-sm">${item.value}</span> / 100</div>
+                <div class="border-t border-slate-800 my-1 pt-1 space-y-0.5">
+                  <div class="text-xs text-slate-300">GDP Shock Index: <span class="font-mono">${Number(m.gdp || 0).toFixed(3)}</span></div>
+                  <div class="text-xs text-slate-300">Annual Inflation: <span class="font-mono">${((m.inflation || 0) * 100).toFixed(2)}%</span></div>
+                  ${shockDetails}
+                </div>`;
       }
     },
     grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
